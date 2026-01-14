@@ -1,0 +1,24 @@
+# Temporary files
+tmpclaude*/
+*.tmp
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment files
+.env
+
+# Data volumes (don't commit runtime data)
+# Volumes are managed by Docker
+
+# Claude Code settings (local only)
+.claude/settings.local.json

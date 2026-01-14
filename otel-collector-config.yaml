@@ -1,0 +1,91 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # Prometheus receiver for scraping metrics (optional - for pulling metrics)
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'otel-collector-self'
+          scrape_interval: 10s
+          static_configs:
+            - targets: ['0.0.0.0:8888']
+
+processors:
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+
+  # Add resource attributes to all telemetry
+  resource:
+    attributes:
+      - key: service.name
+        value: ai-agent-training
+        action: upsert
+      - key: service.version
+        value: 1.0.0
+        action: upsert
+      - key: deployment.environment
+        value: demo
+        action: upsert
+
+  # Memory limiter to prevent OOM
+  memory_limiter:
+    limit_mib: 512
+    check_interval: 1s
+    spike_limit_mib: 64
+
+  # Transform attributes
+  transform:
+    error_mode: ignore
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  pprof:
+    endpoint: 0.0.0.0:1777
+
+exporters:
+  # OTLP exporter for Jaeger (using gRPC endpoint)
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
+  # Zipkin exporter for Zipkin tracing
+  zipkin:
+    endpoint: http://zipkin:9411/api/v2/spans
+    format: proto
+    tls:
+      insecure: true
+
+  # Prometheus exporter for metrics (scraped by Prometheus)
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    namespace: prometheus
+
+  # Debug exporter (replaces deprecated logging exporter)
+  debug:
+    verbosity: detailed
+
+service:
+  extensions: [health_check, pprof]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, transform, batch]
+      exporters: [otlp/jaeger, zipkin, debug]
+
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, transform, batch]
+      exporters: [prometheus, debug]
+
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, transform, batch]
+      exporters: [debug]

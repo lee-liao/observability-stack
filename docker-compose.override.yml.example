@@ -1,0 +1,45 @@
+# Docker Compose Override Example
+# Copy this file to docker-compose.override.yml and customize as needed
+# This file overrides settings in docker-compose.yml without modifying the original
+
+version: '3.8'
+
+services:
+  # Example: Add resource limits
+  # prometheus:
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         memory: 2G
+  #       reservations:
+  #         memory: 1G
+
+  # Example: Change ports to avoid conflicts
+  # grafana:
+  #   ports:
+  #     - "3001:3000"  # Use port 3001 instead of 3000
+
+  # Example: Add Loki for log aggregation
+  # loki:
+  #   image: grafana/loki:latest
+  #   ports:
+  #     - "3100:3100"
+  #   networks:
+  #     - observability
+  #   volumes:
+  #     - loki-data:/loki
+
+  # Example: Add Promtail for log collection
+  # promtail:
+  #   image: grafana/promtail:latest
+  #   volumes:
+  #     - /var/log:/var/log:ro
+  #     - ./promtail-config.yml:/etc/promtail/config.yml
+  #   networks:
+  #     - observability
+  #   depends_on:
+  #     - loki
+
+# Example: Add volumes for log aggregation
+# volumes:
+#   loki-data:
