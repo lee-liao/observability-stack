@@ -1,5 +1,5 @@
 # Temporary files
-tmpclaude*/
+tmpclaude*
 *.tmp
 *.log
 

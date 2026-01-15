@@ -23,9 +23,6 @@ processors:
   # Add resource attributes to all telemetry
   resource:
     attributes:
-      - key: service.name
-        value: ai-agent-training
-        action: upsert
       - key: service.version
         value: 1.0.0
         action: upsert
@@ -50,7 +47,7 @@ extensions:
     endpoint: 0.0.0.0:1777
 
 exporters:
-  # OTLP exporter for Jaeger (using gRPC endpoint)
+  # OTLP exporter for Jaeger (using OTLP protocol - recommended)
   otlp/jaeger:
     endpoint: jaeger:4317
     tls:
