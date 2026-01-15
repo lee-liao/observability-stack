@@ -1349,6 +1349,223 @@ Both Jaeger and Zipkin are distributed tracing systems, but they have different 
 
 **Recommendation**: Start with Jaeger for comprehensive tracing, use Zipkin for simpler needs or legacy compatibility. Since traces are sent to both, you can switch between them as needed.
 
+## Sentry vs. OpenTelemetry Stack
+
+### Sentry's Role in Observability
+
+Sentry is a powerful **error tracking and issue management** platform that complements your OpenTelemetry stack. Understanding when to use Sentry versus your OTLP pipeline is crucial for effective observability.
+
+### Sentry Support for OTLP (Current State - 2026)
+
+| Feature | Support Status | Notes |
+|---------|---------------|-------|
+| **Traces via OTLP** | ⚠️ Open Beta | Limited features (no span events, partial links support) |
+| **Logs via OTLP** | ⚠️ Open Beta | Available but in development |
+| **Metrics via OTLP** | ❌ Not Supported | Use Sentry SDK metrics or Prometheus |
+| **Error Tracking** | ✅ Full Support | Core strength - production-ready |
+
+### Recommended Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    APPLICATION                                  │
+│                 (Your Services)                                 │
+└────────┬──────────────────────────────────────────┬─────────────┘
+         │                                          │
+         │ Errors & Issues                          │ Telemetry
+         │                                          │ (Traces + Metrics)
+         ↓                                          ↓
+┌──────────────────┐                    ┌──────────────────────┐
+│   Sentry SDK     │                    │   OTLP SDK           │
+│  (Error Focus)   │                    │ (Telemetry Focus)    │
+└────────┬─────────┘                    └──────────┬───────────┘
+         │                                         │
+         ↓                                         ↓
+┌──────────────────┐                    ┌──────────────────────┐
+│     Sentry       │                    │  OTEL Collector      │
+│  (SaaS/Self-host)│                    │                      │
+│                  │                    │  ├─► Jaeger (Traces) │
+│  • Errors        │                    │  ├─► Prometheus      │
+│  • Issues        │                    │  └─► Zipkin          │
+│  • Alerts        │                    └──────────────────────┘
+│  • Release Track │
+└──────────────────┘
+```
+
+### Tool Comparison: When to Use What
+
+| Use Case | Recommended Tool | Why |
+|----------|-----------------|-----|
+| **Error Tracking** | **Sentry** | Stack traces, issue management, breadcrumbs, alerting |
+| **Distributed Tracing** | **Jaeger** | Full OTLP support, trace visualization, dependency graphs |
+| **Metrics Storage** | **Prometheus** | Long-term storage, PromQL queries, trend analysis |
+| **Dashboards** | **Grafana** | Flexible visualization, multi-datasource support |
+| **Performance Monitoring** | **Jaeger + Prometheus** | Jaeger for traces, Prometheus for metrics |
+| **Alerting** | **Sentry / AlertManager** | Sentry for errors, Prometheus AlertManager for metrics |
+| **Release Tracking** | **Sentry** | Deployment monitoring, error rate changes, rollbacks |
+
+### Practical Implementation
+
+#### Option 1: Separate SDKs (Recommended for Production)
+
+```python
+import sentry_sdk
+from opentelemetry import trace, metrics
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+# Sentry: Error tracking & issue management
+sentry_sdk.init(
+    dsn="__YOUR_SENTRY_DSN__",
+    traces_sample_rate=0.1,  # Send 10% of transactions to Sentry
+    environment="production"
+)
+
+# OpenTelemetry: Full telemetry pipeline
+trace.get_tracer_provider().add_span_processor(
+    BatchSpanProcessor(OTLPSpanExporter(endpoint="http://localhost:4317"))
+)
+
+# Application code
+try:
+    do_something()
+except Exception as e:
+    # Sentry: Error tracking
+    sentry_sdk.capture_exception(e)
+
+    # OTLP: Trace context (if available)
+    span = trace.get_current_span()
+    if span:
+        span.record_exception(e)
+
+    raise
+```
+
+**Benefits:**
+- ✅ Best of both worlds
+- ✅ Sentry's excellent error tracking
+- ✅ Full OTLP telemetry to your local stack
+- ✅ No beta limitations
+
+#### Option 2: OTLP to Sentry (Not Recommended Yet)
+
+```yaml
+# otel-collector-config.yaml
+exporters:
+  otlp/sentry:
+    endpoint: "https://otlp.sentry.io:4317"
+    headers:
+      "X-Sentry-Auth-Token": "__YOUR_TOKEN__"
+```
+
+**Limitations:**
+- ⚠️ OTLP support in beta (as of 2026)
+- ⚠️ No metrics support via OTLP
+- ⚠️ Limited trace features (no span events, partial links)
+- ⚠️ May have breaking changes
+
+### Key Differences
+
+| Aspect | Sentry | OTLP Stack (Jaeger + Prometheus) |
+|--------|--------|---------------------------------|
+| **Primary Focus** | Error tracking & issues | Full observability telemetry |
+| **Data Model** | Issues, Events, Transactions | Spans, Metrics, Logs |
+| **Strengths** | Alerting, issue management, stack traces | Deep performance analysis, trends |
+| **Storage** | Cloud (SaaS) or self-hosted | Local (Prometheus + Jaeger) |
+| **Query Language** | Sentry search UI | PromQL + Jaeger UI |
+| **Cost** | Based on volume | Free (self-hosted) |
+| **Setup Complexity** | Simple (SDK + DSN) | Moderate (Docker Compose) |
+
+### When to Add Sentry
+
+**Add Sentry when you need:**
+
+1. **Production Error Monitoring**
+   - Get notified immediately when errors occur
+   - Track error rates across releases
+   - Assign and prioritize issues
+
+2. **Alerting**
+   - Email/Slack notifications on errors
+   - Anomaly detection
+   - Custom alert rules
+
+3. **Release Tracking**
+   - Monitor deployments
+   - Compare error rates before/after releases
+   - Identify problematic releases quickly
+
+4. **User Context**
+   - See which users are affected
+   - User feedback integration
+   - Session replay (with paid plan)
+
+5. **Team Collaboration**
+   - Issue assignment
+   - Comment threads
+   - Resolution tracking
+
+### When to Use OTLP Stack Only
+
+**Use OTLP stack (Jaeger + Prometheus) when:**
+
+1. **Development Environment**
+   - Full control over data
+   - No external dependencies
+   - Cost-free
+
+2. **Performance Analysis**
+   - Deep distributed tracing
+   - Performance bottleneck identification
+   - Service dependency mapping
+
+3. **Metrics & Trends**
+   - Long-term metric storage
+   - Custom dashboards
+   - Historical data analysis
+
+4. **Compliance / Data Privacy**
+   - On-premises data storage
+   - No data leaving your infrastructure
+   - Full data control
+
+### Hybrid Setup Example
+
+```yaml
+# Production architecture
+Application:
+  ├─ Sentry SDK (errors, transactions)
+  └─ OTLP SDK (traces, metrics)
+
+Destinations:
+  ├─ Sentry (errors, alerts, issues)
+  ├─ Jaeger (distributed traces)
+  └─ Prometheus (metrics, trends)
+
+Visualization:
+  ├─ Sentry UI (error investigation)
+  └─ Grafana (performance dashboards)
+```
+
+### Summary
+
+| Question | Answer |
+|----------|--------|
+| **Should I use Sentry for OTLP?** | ❌ Not recommended (yet) - still beta, limited features |
+| **Should I use Sentry for errors?** | ✅ **YES!** - That's its core strength |
+| **Can I use both?** | ✅ **YES!** - Sentry SDK for errors + OTLP for telemetry |
+| **What's the best combo?** | Sentry (errors) + Jaeger (traces) + Prometheus (metrics) + Grafana (dashboards) |
+
+**Bottom Line:** Your current OTLP stack is **well-architected** for development and self-hosted observability. Sentry would be an **excellent addition** for production error tracking and alerting, but should complement (not replace) your OTLP pipeline.
+
+### Additional Resources
+
+- [Sentry OpenTelemetry Documentation](https://docs.sentry.io/platforms/python/performance/instrumentation/opentelemetry/)
+- [Sentry OTLP Protocol (Beta)](https://docs.sentry.io/concepts/otlp/)
+- [OpenTelemetry + Sentry Integration](https://sentry.io/for/opentelemetry/)
+- [Choosing an Observability Tool](https://www.jaegertracing.io/docs/latest/)
+
 ## Additional Resources
 
 - [Prometheus Documentation](https://prometheus.io/docs/)
